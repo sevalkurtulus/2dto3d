@@ -5,13 +5,23 @@ const wrap = document.getElementById("canvas-wrap");
 const skuListEl = document.getElementById("sku-list");
 const metaEl = document.getElementById("meta");
 const loadingEl = document.getElementById("loading");
+const editPanel = document.getElementById('edit-panel');
+const textInput = document.getElementById('text-input');
+const addTextBtn = document.getElementById('add-text-btn');
+const imageInput = document.getElementById('image-input');
+const posXInput = document.getElementById('pos-x');
+const posYInput = document.getElementById('pos-y');
+const rotationInput = document.getElementById('rotation');
+const scaleInput = document.getElementById('scale');
 
 let renderer,
   scene,
   camera,
   controls,
   currentMesh,
-  currentMats = [];
+  currentMats = [],
+  raycaster,
+  mouse;
 const cfg = {
   "items": [
     {
@@ -40,6 +50,11 @@ const cfg = {
 
 let items = [];
 let selectedSKU = null;
+let selectedFace = null;
+let lastDecal = null;
+let isAnimating = false;
+let animationStartTime = 0;
+const animationDuration = 500; // ms
 
 init();
 
@@ -71,18 +86,7 @@ function init() {
   dir.castShadow = false;
   scene.add(dir);
 
-  // Ground (soft)
-  const ground = new THREE.Mesh(
-    new THREE.CircleGeometry(5, 64),
-    new THREE.MeshStandardMaterial({
-      color: 0xebeef2,
-      metalness: 0,
-      roughness: 1,
-    })
-  );
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -0.001;
-  scene.add(ground);
+  
 
   // Controls
   controls = new OrbitControls(camera, renderer.domElement);
@@ -92,8 +96,20 @@ function init() {
   controls.maxDistance = 10;
   controls.target.set(0, 0.35, 0);
 
+  // Raycaster
+  raycaster = new THREE.Raycaster();
+  mouse = new THREE.Vector2();
+
   // Events
   window.addEventListener("resize", onResize);
+  renderer.domElement.addEventListener("click", onCanvasClick, false);
+  addTextBtn.addEventListener('click', onAddText);
+  imageInput.addEventListener('change', onAddImage);
+
+  posXInput.addEventListener('input', onTransformChange);
+  posYInput.addEventListener('input', onTransformChange);
+  rotationInput.addEventListener('input', onTransformChange);
+  scaleInput.addEventListener('input', onTransformChange);
 
   // Load config & UI
   items = cfg.items || [];
@@ -271,6 +287,270 @@ function onResize() {
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   renderer.setSize(w, h);
+}
+
+function onCanvasClick(event) {
+  if (isAnimating) return;
+
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+
+  if (!currentMesh) return;
+
+  const intersects = raycaster.intersectObject(currentMesh);
+
+  if (intersects.length > 0) {
+    const faceIndex = intersects[0].faceIndex;
+    selectedFace = {
+      mesh: currentMesh,
+      materialIndex: Math.floor(faceIndex / 2),
+      faceNormal: intersects[0].face.normal,
+      point: intersects[0].point,
+    };
+    editPanel.classList.remove('hidden');
+
+    const distance = 0.8; // Adjust as needed
+    const targetPosition = selectedFace.point.clone().add(selectedFace.faceNormal.clone().multiplyScalar(distance));
+    const targetLookAt = selectedFace.point.clone();
+    animateCameraTo(targetPosition, targetLookAt);
+
+  } else {
+    selectedFace = null;
+    editPanel.classList.add('hidden');
+  }
+}
+
+function animateCameraTo(targetPosition, targetLookAt) {
+  isAnimating = true;
+  controls.enabled = false;
+  animationStartTime = Date.now();
+
+  const startPosition = camera.position.clone();
+  const startLookAt = controls.target.clone();
+
+  function animate() {
+    if (!isAnimating) return;
+
+    const now = Date.now();
+    const elapsed = now - animationStartTime;
+    const t = Math.min(1, elapsed / animationDuration);
+
+    camera.position.lerpVectors(startPosition, targetPosition, t);
+    controls.target.lerpVectors(startLookAt, targetLookAt, t);
+    controls.update();
+
+    if (t < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      isAnimating = false;
+      controls.enabled = true;
+    }
+  }
+  animate();
+}
+
+function onAddText() {
+  if (!selectedFace) return;
+
+  const text = textInput.value;
+  if (!text) return;
+
+  addTextDecal(text);
+}
+
+function addTextDecal(text) {
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  const canvasSize = 256; // Power of 2 for texture
+  canvas.width = canvasSize;
+  canvas.height = canvasSize;
+
+  context.fillStyle = 'rgba(0, 0, 0, 0)'; // Transparent background
+  context.fillRect(0, 0, canvasSize, canvasSize);
+
+  context.fillStyle = 'black';
+  context.font = '48px Arial';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText(text, canvasSize / 2, canvasSize / 2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+
+  const decalMaterial = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -4, // To prevent z-fighting
+  });
+
+  const decalSize = 0.2; // Size of the decal plane
+  const decalGeometry = new THREE.PlaneGeometry(decalSize, decalSize);
+  const decal = new THREE.Mesh(decalGeometry, decalMaterial);
+
+  decal.position.copy(selectedFace.point);
+  decal.lookAt(selectedFace.point.clone().add(selectedFace.faceNormal));
+
+  decal.initialPosition = decal.position.clone();
+  const normal = selectedFace.faceNormal.clone();
+  const tangent = new THREE.Vector3();
+  tangent.crossVectors(normal, new THREE.Vector3(0, 1, 0));
+  if (tangent.lengthSq() < 0.001) {
+    tangent.crossVectors(normal, new THREE.Vector3(1, 0, 0));
+  }
+  tangent.normalize();
+  const bitangent = new THREE.Vector3().crossVectors(normal, tangent).normalize();
+  decal.tangent = tangent;
+  decal.bitangent = bitangent;
+
+  scene.add(decal);
+  lastDecal = decal;
+  updateTransformLimits();
+}
+
+function onAddImage(event) {
+  if (!selectedFace) return;
+
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    addImageDecal(e.target.result);
+  };
+  reader.readAsDataURL(file);
+}
+
+function addImageDecal(imageData) {
+  const textureLoader = new THREE.TextureLoader();
+  textureLoader.load(imageData, (texture) => {
+    const decalMaterial = new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+    });
+
+    const decalSize = 0.2;
+    const aspect = texture.image.width / texture.image.height;
+    const decalGeometry = new THREE.PlaneGeometry(decalSize, decalSize / aspect);
+    const decal = new THREE.Mesh(decalGeometry, decalMaterial);
+
+    decal.position.copy(selectedFace.point);
+    decal.lookAt(selectedFace.point.clone().add(selectedFace.faceNormal));
+
+    decal.initialPosition = decal.position.clone();
+    const normal = selectedFace.faceNormal.clone();
+    const tangent = new THREE.Vector3();
+    tangent.crossVectors(normal, new THREE.Vector3(0, 1, 0));
+    if (tangent.lengthSq() < 0.001) {
+      tangent.crossVectors(normal, new THREE.Vector3(1, 0, 0));
+    }
+    tangent.normalize();
+    const bitangent = new THREE.Vector3().crossVectors(normal, tangent).normalize();
+    decal.tangent = tangent;
+    decal.bitangent = bitangent;
+
+    scene.add(decal);
+    lastDecal = decal;
+    updateTransformLimits();
+  });
+}
+
+function updateTransformLimits() {
+  if (!lastDecal || !selectedFace) return;
+
+  const boxParams = currentMesh.geometry.parameters;
+  const decalParams = lastDecal.geometry.parameters;
+
+  let faceWidth, faceHeight;
+  const matIndex = selectedFace.materialIndex;
+
+  if (matIndex === 0 || matIndex === 1) { // right, left
+    faceWidth = boxParams.depth;
+    faceHeight = boxParams.height;
+  } else if (matIndex === 2 || matIndex === 3) { // top, bottom
+    faceWidth = boxParams.width;
+    faceHeight = boxParams.depth;
+  } else { // front, back
+    faceWidth = boxParams.width;
+    faceHeight = boxParams.height;
+  }
+
+  const decalWidth = decalParams.width * lastDecal.scale.x;
+  const decalHeight = decalParams.height * lastDecal.scale.y;
+
+  const maxX = (faceWidth - decalWidth) / 2;
+  const maxY = (faceHeight - decalHeight) / 2;
+
+  posXInput.min = -maxX;
+  posXInput.max = maxX;
+  posYInput.min = -maxY;
+  posYInput.max = maxY;
+
+  // Set step to a reasonable value
+  const step = Math.min(maxX, maxY) / 100;
+  posXInput.step = step;
+  posYInput.step = step;
+}
+
+function onTransformChange() {
+  if (!lastDecal || !selectedFace) return;
+
+  // Update scale first, as it affects position limits
+  const scale = parseFloat(scaleInput.value);
+  lastDecal.scale.set(scale, scale, scale);
+
+  // Update position limits
+  updateTransformLimits();
+
+  const boxParams = currentMesh.geometry.parameters;
+  const decalParams = lastDecal.geometry.parameters;
+
+  let faceWidth, faceHeight;
+  const matIndex = selectedFace.materialIndex;
+
+  if (matIndex === 0 || matIndex === 1) { // right, left
+    faceWidth = boxParams.depth;
+    faceHeight = boxParams.height;
+  } else if (matIndex === 2 || matIndex === 3) { // top, bottom
+    faceWidth = boxParams.width;
+    faceHeight = boxParams.depth;
+  } else { // front, back
+    faceWidth = boxParams.width;
+    faceHeight = boxParams.height;
+  }
+
+  const decalWidth = decalParams.width * lastDecal.scale.x;
+  const decalHeight = decalParams.height * lastDecal.scale.y;
+
+  const maxX = (faceWidth - decalWidth) / 2;
+  const maxY = (faceHeight - decalHeight) / 2;
+
+  let posX = parseFloat(posXInput.value);
+  let posY = parseFloat(posYInput.value);
+
+  posX = Math.max(-maxX, Math.min(maxX, posX));
+  posY = Math.max(-maxY, Math.min(maxY, posY));
+
+  posXInput.value = posX;
+  posYInput.value = posY;
+
+  const newPosition = lastDecal.initialPosition.clone()
+    .add(lastDecal.tangent.clone().multiplyScalar(posX))
+    .add(lastDecal.bitangent.clone().multiplyScalar(posY));
+  lastDecal.position.copy(newPosition);
+
+  // Rotation
+  const rotation = parseFloat(rotationInput.value) * (Math.PI / 180);
+  lastDecal.rotation.z = rotation;
 }
 
 function animate() {
