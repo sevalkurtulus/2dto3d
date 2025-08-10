@@ -52,6 +52,7 @@ let items = [];
 let selectedSKU = null;
 let selectedFace = null;
 let lastDecal = null;
+let hasUnsavedChanges = false;
 let isAnimating = false;
 let animationStartTime = 0;
 const animationDuration = 500; // ms
@@ -151,13 +152,50 @@ async function selectSKU(sku) {
   const item = items.find((i) => i.sku === sku);
   if (!item) return;
 
+  if (hasUnsavedChanges) {
+    const confirmSwitch = confirm("Mevcut koli üzerindeki değişiklikler kaydedilmeyecektir. Yeni koliye geçmek istediğinize emin misiniz?");
+    if (!confirmSwitch) {
+      return; // User cancelled the switch
+    }
+  }
+
   selectedSKU = sku;
   setActive(sku);
   metaEl.textContent = `${item.name || item.sku} — ${fmtDims(item.dims)}`;
 
+  clearDecals(); // Clear existing decals and reset UI
   showLoading(true);
   await loadItem(item).catch(console.error);
   showLoading(false);
+}
+
+function clearDecals() {
+  // Remove all decals from the scene
+  const decalsToRemove = [];
+  scene.children.forEach(child => {
+    // Assuming decals are THREE.Mesh objects and not part of the main box mesh
+    // A more robust check might involve a specific property or naming convention
+    if (child instanceof THREE.Mesh && child !== currentMesh) {
+      decalsToRemove.push(child);
+    }
+  });
+
+  decalsToRemove.forEach(decal => {
+    scene.remove(decal);
+    decal.geometry?.dispose();
+    decal.material?.dispose();
+  });
+
+  lastDecal = null;
+  hasUnsavedChanges = false;
+  selectedFace = null;
+  editPanel.classList.add('hidden');
+  textInput.value = '';
+  imageInput.value = ''; // Clear file input
+  posXInput.value = '0';
+  posYInput.value = '0';
+  rotationInput.value = '0';
+  scaleInput.value = '1';
 }
 
 function showLoading(on) {
@@ -410,6 +448,7 @@ function addTextDecal(text) {
 
   scene.add(decal);
   lastDecal = decal;
+  hasUnsavedChanges = true;
   updateTransformLimits();
 }
 
@@ -460,6 +499,7 @@ function addImageDecal(imageData) {
 
     scene.add(decal);
     lastDecal = decal;
+    hasUnsavedChanges = true;
     updateTransformLimits();
   });
 }
