@@ -1,0 +1,35 @@
+{
+  "items": [
+    {
+      "sku": "SKU123",
+      "name": "Kraft Koli - Orta",
+      "dims": {
+        "w": 300,
+        "h": 200,
+        "d": 220
+      },
+      "faces": {
+        "front": "assets/boxes/SKU123/front.jpg",
+        "back": "assets/boxes/SKU123/back.jpg",
+        "left": "assets/boxes/SKU123/left.jpg",
+        "right": "assets/boxes/SKU123/right.jpg",
+        "top": "assets/boxes/SKU123/top.jpg",
+        "bottom": "assets/boxes/SKU123/bottom.jpg"
+      },
+      "thumb": "assets/boxes/SKU123/front.jpg"
+    },
+    {
+      "sku": "SKU124",
+      "name": "Beyaz Koli - Küçük (Tek görsel)",
+      "dims": {
+        "w": 220,
+        "h": 160,
+        "d": 180
+      },
+      "faces": {
+        "single": "assets/boxes/SKU124/single.jpg"
+      },
+      "thumb": "assets/boxes/SKU124/single.jpg"
+    }
+  ]
+}

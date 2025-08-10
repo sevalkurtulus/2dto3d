@@ -1,0 +1,49 @@
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial; color: #1e1e1e; }
+
+#app { display: grid; grid-template-columns: 300px 1fr; height: 100vh; }
+
+.sidebar {
+  border-right: 1px solid #eee;
+  padding: 16px;
+  overflow: auto;
+  background: #fafafa;
+}
+.sidebar h1 { font-size: 16px; margin: 0 0 12px; }
+.sku-list { display: grid; gap: 8px; }
+.sku {
+  display: grid; grid-template-columns: 56px 1fr;
+  align-items: center; gap: 10px;
+  padding: 8px; border: 1px solid #e5e5e5; border-radius: 8px;
+  background: #fff; cursor: pointer;
+}
+.sku:hover { border-color: #c7c7c7; }
+.sku.active { outline: 2px solid #1f6feb; }
+
+.sku img {
+  width: 56px; height: 56px; object-fit: cover; border-radius: 6px; background: #f2f2f2;
+}
+.sku .name { font-weight: 600; }
+.sku .dims { font-size: 12px; color: #666; }
+
+.stage { position: relative; background: #f6f8fa; }
+#canvas-wrap { position: absolute; inset: 0; }
+#hud { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 8px; align-items: center; }
+#meta {
+  background: rgba(255,255,255,.9);
+  border: 1px solid #e5e5e5; border-radius: 8px;
+  padding: 6px 10px; font-size: 12px;
+}
+#loading {
+  background: #111; color: #fff; border-radius: 999px;
+  padding: 6px 10px; font-size: 12px;
+}
+.hidden { display: none; }
+
+/* responsive */
+@media (max-width: 960px) {
+  #app { grid-template-columns: 1fr; grid-template-rows: 280px 1fr; }
+  .sidebar { border-right: 0; border-bottom: 1px solid #eee; }
+  .stage { height: calc(100vh - 280px); }
+}
