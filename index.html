@@ -11,6 +11,7 @@
     <aside class="sidebar">
       <h1>Koli Seç</h1>
       <div id="sku-list" class="sku-list"><!-- JS dolduracak --></div>
+      <button id="show-2d-view-btn">2D Görünüm</button>
       <div id="edit-panel" class="hidden">
         <h3>Yüzeyi Düzenle</h3>
         <div>
@@ -45,6 +46,10 @@
 
     <main class="stage">
       <div id="canvas-wrap"></div>
+      <div id="two-d-view" class="hidden">
+        <canvas id="two-d-canvas"></canvas>
+        <button id="back-to-3d-btn">3D Görünüme Dön</button>
+      </div>
       <div id="hud">
         <div id="meta"></div>
         <div id="loading" class="hidden">Yükleniyor…</div>

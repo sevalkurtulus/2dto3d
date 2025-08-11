@@ -15,6 +15,10 @@ const posYInput = document.getElementById("pos-y");
 const rotationInput = document.getElementById("rotation");
 const scaleInput = document.getElementById('scale');
 const deleteDecalBtn = document.getElementById('delete-decal-btn');
+const show2dViewBtn = document.getElementById('show-2d-view-btn');
+const twoDViewEl = document.getElementById('two-d-view');
+const twoDCanvas = document.getElementById('two-d-canvas');
+const backTo3dBtn = document.getElementById('back-to-3d-btn');
 
 let renderer,
   scene,
@@ -59,8 +63,36 @@ const cfg = {
       faces: { single: "assets/boxes/SKU124/single.jpg" },
       thumb: "assets/boxes/SKU124/single.jpg",
     },
+    {
+      sku: "SKU125",
+      name: "Küçük Koli",
+      dims: { w: 150, h: 100, d: 120 },
+      faces: { single: "assets/boxes/SKU124/single.jpg" },
+      thumb: "assets/boxes/SKU124/single.jpg",
+    },
   ],
 };
+
+function onDeleteDecal() {
+  if (selectedDecal) {
+    scene.remove(selectedDecal);
+    selectedDecal.geometry?.dispose();
+    selectedDecal.material?.dispose();
+
+    // Remove from decals array
+    const index = decals.indexOf(selectedDecal);
+    if (index > -1) {
+      decals.splice(index, 1);
+    }
+
+    selectedDecal = null;
+    selectedFace = null; // Clear selected face as well
+    editPanel.classList.add('hidden');
+
+    // Update hasUnsavedChanges
+    hasUnsavedChanges = decals.length > 0;
+  }
+}
 
 // ---------- Init ----------
 init();
@@ -110,6 +142,8 @@ function init() {
   addTextBtn.addEventListener("click", onAddText);
   imageInput.addEventListener("change", onAddImage);
   deleteDecalBtn.addEventListener('click', onDeleteDecal);
+  show2dViewBtn.addEventListener('click', show2DView);
+  backTo3dBtn.addEventListener('click', hide2DView);
   posXInput.addEventListener("input", onTransformChange);
   posYInput.addEventListener("input", onTransformChange);
   rotationInput.addEventListener("input", onTransformChange);
@@ -120,6 +154,7 @@ function init() {
   buildSidebar(items);
   if (items.length) selectSKU(items[0].sku);
 
+  hide2DView(); // Ensure 3D view is active initially
   animate();
 }
 
@@ -562,6 +597,7 @@ function addTextDecal(text) {
   decal.initialPosition = selectedFace.center.clone();
   decal.tangent = selectedFace.tangent.clone();
   decal.bitangent = selectedFace.bitangent.clone();
+  decal.attachedFaceMaterialIndex = selectedFace.materialIndex; // Store face info
 
   scene.add(decal);
   decals.push(decal); // Add decal to the array
@@ -605,6 +641,7 @@ function addImageDecal(imageData) {
     decal.initialPosition = selectedFace.center.clone();
     decal.tangent = selectedFace.tangent.clone();
     decal.bitangent = selectedFace.bitangent.clone();
+    decal.attachedFaceMaterialIndex = selectedFace.materialIndex; // Store face info
 
     scene.add(decal);
     decals.push(decal); // Add decal to the array
@@ -615,25 +652,135 @@ function addImageDecal(imageData) {
   });
 }
 
-function onDeleteDecal() {
-  if (selectedDecal) {
-    scene.remove(selectedDecal);
-    selectedDecal.geometry?.dispose();
-    selectedDecal.material?.dispose();
 
-    // Remove from decals array
-    const index = decals.indexOf(selectedDecal);
-    if (index > -1) {
-      decals.splice(index, 1);
+
+function show2DView() {
+  // Hide 3D canvas
+  wrap.classList.add('hidden');
+  // Show 2D canvas
+  twoDViewEl.classList.remove('hidden');
+  // TODO: Implement 2D rendering logic here
+  draw2DBox();
+}
+
+function hide2DView() {
+  // Show 3D canvas
+  wrap.classList.remove('hidden');
+  // Hide 2D canvas
+  twoDViewEl.classList.add('hidden');
+}
+
+function draw2DBox() {
+  const ctx = twoDCanvas.getContext('2d');
+  ctx.clearRect(0, 0, twoDCanvas.width, twoDCanvas.height);
+
+  const boxParams = currentMesh.geometry.parameters;
+  const w = boxParams.width * 1000; // Convert to mm for 2D drawing
+  const h = boxParams.height * 1000;
+  const d = boxParams.depth * 1000;
+
+  // Define layout for unfolded box (cross shape)
+  // Center strip: Back, Top, Front, Bottom
+  // Side flaps: Left, Right (attached to Top face)
+
+  const scaleFactor = 1; // Adjust as needed for canvas size
+
+  const faceWidth = w * scaleFactor;
+  const faceHeight = h * scaleFactor;
+  const faceDepth = d * scaleFactor;
+
+  const layout = {
+    // materialIndex: { x, y, w, h }
+    // Order: right, left, top, bottom, front, back
+    // Assuming Back (5) is the central face in the vertical strip
+    5: { x: faceDepth, y: faceDepth, w: faceWidth, h: faceHeight }, // Back
+    2: { x: faceDepth, y: 0, w: faceWidth, h: faceDepth }, // Top (above Back)
+    3: { x: faceDepth, y: faceDepth + faceHeight, w: faceWidth, h: faceDepth }, // Bottom (below Back)
+    4: { x: faceDepth, y: faceDepth + faceHeight + faceDepth, w: faceWidth, h: faceHeight }, // Front (below Bottom)
+    1: { x: 0, y: faceDepth, w: faceDepth, h: faceHeight }, // Left (left of Back)
+    0: { x: faceDepth + faceWidth, y: faceDepth, w: faceDepth, h: faceHeight }, // Right (right of Back)
+  };
+
+  // Calculate total canvas dimensions based on the corrected layout
+  const totalWidth = faceDepth + faceWidth + faceDepth; // Left + Back/Top/Bottom + Right
+  const totalHeight = faceDepth + faceHeight + faceDepth + faceHeight; // Top + Back + Bottom + Front
+
+  twoDCanvas.width = totalWidth;
+  twoDCanvas.height = totalHeight;
+
+  ctx.fillStyle = '#f0f0f0'; // Background for the unfolded box
+  ctx.fillRect(0, 0, totalWidth, totalHeight);
+
+  // Draw faces
+  const loader = new THREE.TextureLoader();
+  const promises = [];
+
+  for (let i = 0; i < currentMats.length; i++) {
+    const mat = currentMats[i];
+    if (mat.map) {
+      const img = new Image();
+      img.src = mat.map.image.src;
+      const { x, y, w, h } = layout[i];
+      promises.push(new Promise(resolve => {
+        img.onload = () => {
+          ctx.drawImage(img, x, y, w, h);
+          resolve();
+        };
+      }));
+    }
+  }
+
+  Promise.all(promises).then(() => {
+    // All textures drawn, now draw decals
+    draw2DDecals(ctx, scaleFactor, layout, boxParams);
+  });
+}
+
+function draw2DDecals(ctx, scaleFactor, layout, boxParams) {
+  decals.forEach(decal => {
+    const faceLayout = layout[decal.attachedFaceMaterialIndex];
+    if (!faceLayout) return; // Should not happen if face info is correctly stored
+
+    const faceW = getFaceSizeForMatIndex(decal.attachedFaceMaterialIndex, boxParams).faceW * 1000; // mm
+    const faceH = getFaceSizeForMatIndex(decal.attachedFaceMaterialIndex, boxParams).faceH * 1000; // mm
+
+    // Decal's position relative to its face center (in meters, from initialPosition)
+    const decalRelativePos = decal.position.clone().sub(decal.initialPosition);
+
+    // Project decal's relative position onto the face's tangent and bitangent axes
+    // These are the x and y offsets on the face plane
+    const offsetX = decalRelativePos.dot(decal.tangent) * 1000; // Convert to mm
+    const offsetY = decalRelativePos.dot(decal.bitangent) * 1000; // Convert to mm
+
+    // Calculate decal's center on the 2D face
+    // Face coordinates are from top-left corner
+    const decal2DX = faceLayout.x + (faceLayout.w / 2) + offsetX * scaleFactor;
+    const decal2DY = faceLayout.y + (faceLayout.h / 2) + offsetY * scaleFactor;
+
+    // Decal's size and rotation
+    const decalBaseWidth = decal.geometry.parameters.width * 1000; // mm
+    const decalBaseHeight = decal.geometry.parameters.height * 1000; // mm
+    const decalScale = decal.scale.x; // Assuming uniform scale
+    const decalRotation = decal.rotation.z; // Z-rotation on the face
+
+    const drawWidth = decalBaseWidth * decalScale * scaleFactor;
+    const drawHeight = decalBaseHeight * decalScale * scaleFactor;
+
+    ctx.save();
+    ctx.translate(decal2DX, decal2DY);
+    ctx.rotate(decalRotation);
+
+    // Draw the decal image or canvas content
+    if (decal.material.map.image instanceof HTMLCanvasElement) {
+      // Text decal
+      ctx.drawImage(decal.material.map.image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+    } else {
+      // Image decal
+      ctx.drawImage(decal.material.map.image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
     }
 
-    selectedDecal = null;
-    selectedFace = null; // Clear selected face as well
-    editPanel.classList.add('hidden');
-
-    // Update hasUnsavedChanges
-    hasUnsavedChanges = decals.length > 0;
-  }
+    ctx.restore();
+  });
 }
 
 // ---------- Movement Limits (with rotation) ----------
