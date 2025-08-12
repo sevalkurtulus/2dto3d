@@ -11,6 +11,24 @@
     <aside class="sidebar">
       <h1>Koli Seç</h1>
       <div id="sku-list" class="sku-list"><!-- JS dolduracak --></div>
+
+      <div id="dimension-panel" class="hidden">
+        <h3>Boyutları Düzenle</h3>
+        <div>
+          <label for="dim-w">Genişlik (mm):</label>
+          <input type="number" id="dim-w">
+        </div>
+        <div>
+          <label for="dim-h">Yükseklik (mm):</label>
+          <input type="number" id="dim-h">
+        </div>
+        <div>
+          <label for="dim-d">Derinlik (mm):</label>
+          <input type="number" id="dim-d">
+        </div>
+        <button id="update-dims-btn">Boyutları Güncelle</button>
+      </div>
+
       <button id="show-2d-view-btn">2D Görünüm</button>
       <div id="edit-panel" class="hidden">
         <h3>Yüzeyi Düzenle</h3>

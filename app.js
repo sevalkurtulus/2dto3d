@@ -6,6 +6,13 @@ const wrap = document.getElementById("canvas-wrap");
 const skuListEl = document.getElementById("sku-list");
 const metaEl = document.getElementById("meta");
 const loadingEl = document.getElementById("loading");
+
+const dimensionPanel = document.getElementById('dimension-panel');
+const dimWInput = document.getElementById('dim-w');
+const dimHInput = document.getElementById('dim-h');
+const dimDInput = document.getElementById('dim-d');
+const updateDimsBtn = document.getElementById('update-dims-btn');
+
 const editPanel = document.getElementById("edit-panel");
 const textInput = document.getElementById("text-input");
 const addTextBtn = document.getElementById("add-text-btn");
@@ -139,6 +146,7 @@ function init() {
   // Events
   window.addEventListener("resize", onResize);
   renderer.domElement.addEventListener("click", onCanvasClick, false);
+  updateDimsBtn.addEventListener('click', updateDimensions);
   addTextBtn.addEventListener("click", onAddText);
   imageInput.addEventListener("change", onAddImage);
   deleteDecalBtn.addEventListener('click', onDeleteDecal);
@@ -166,9 +174,7 @@ function buildSidebar(items) {
     div.className = "sku";
     div.dataset.sku = item.sku;
     div.innerHTML = `
-      <img src="${
-        item.thumb || item.faces?.front || item.faces?.single || ""
-      }" alt="">
+      <img src="${item.thumb || item.faces?.front || item.faces?.single || ""}" alt="">
       <div>
         <div class="name">${item.name || item.sku}</div>
         <div class="dims">${fmtDims(item.dims)}</div>
@@ -207,10 +213,51 @@ async function selectSKU(sku) {
   setActive(sku);
   metaEl.textContent = `${item.name || item.sku} — ${fmtDims(item.dims)}`;
 
+  // Önce mevcut durumu temizle
   clearDecals();
+
+  // Yeni koli modelini yükle
   showLoading(true);
   await loadItem(item).catch(console.error);
   showLoading(false);
+
+  // Her şey yüklendikten sonra, boyutları ilgili alanlara doldur ve paneli göster
+  dimWInput.value = item.dims.w;
+  dimHInput.value = item.dims.h;
+  dimDInput.value = item.dims.d;
+  dimensionPanel.classList.remove('hidden');
+}
+
+function updateDimensions() {
+  if (!selectedSKU) return;
+
+  const w = parseFloat(dimWInput.value);
+  const h = parseFloat(dimHInput.value);
+  const d = parseFloat(dimDInput.value);
+
+  if (isNaN(w) || isNaN(h) || isNaN(d) || w <= 0 || h <= 0 || d <= 0) {
+    alert("Lütfen geçerli ve pozitif boyutlar girin.");
+    return;
+  }
+
+  const currentItem = items.find(i => i.sku === selectedSKU);
+  const modifiedItem = {
+    ...currentItem,
+    dims: { w, h, d },
+  };
+
+  metaEl.textContent = `${modifiedItem.name || modifiedItem.sku} — ${fmtDims(modifiedItem.dims)}`;
+
+  // Yeni boyutlarla modeli yeniden yükle
+  clearDecals();
+  showLoading(true);
+  loadItem(modifiedItem)
+    .catch(console.error)
+    .finally(() => {
+      showLoading(false);
+      // Güncellemeden sonra paneli tekrar göster
+      dimensionPanel.classList.remove('hidden');
+    });
 }
 
 function clearDecals() {
@@ -229,6 +276,7 @@ function clearDecals() {
   hasUnsavedChanges = false;
   selectedFace = null;
 
+  dimensionPanel.classList.add('hidden');
   editPanel.classList.add("hidden");
   textInput.value = "";
   imageInput.value = "";

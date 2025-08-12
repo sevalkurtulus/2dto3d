@@ -41,28 +41,29 @@ body { margin: 0; font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ari
 }
 .hidden { display: none; }
 
+#dimension-panel,
 #edit-panel {
   margin-top: 20px;
   padding-top: 20px;
   border-top: 1px solid #eee;
 }
+#dimension-panel h3,
 #edit-panel h3 {
   font-size: 16px;
   margin: 0 0 12px;
 }
-#edit-panel h4 {
-  font-size: 14px;
-  margin: 16px 0 8px;
-}
+#dimension-panel div,
 #edit-panel div {
   margin-bottom: 8px;
 }
+#dimension-panel label,
 #edit-panel label {
   display: block;
   font-size: 12px;
   margin-bottom: 4px;
   color: #666;
 }
+#dimension-panel input,
 #edit-panel input[type="text"],
 #edit-panel input[type="file"],
 #edit-panel button {
@@ -72,14 +73,21 @@ body { margin: 0; font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ari
   border-radius: 6px;
   font-size: 14px;
 }
+#dimension-panel button,
 #edit-panel button {
   background: #1f6feb;
   color: #fff;
   cursor: pointer;
   margin-top: 4px;
 }
+#dimension-panel button:hover,
 #edit-panel button:hover {
   background: #1a5bbd;
+}
+
+#edit-panel h4 {
+  font-size: 14px;
+  margin: 16px 0 8px;
 }
 #edit-panel input[type="range"] {
   width: 100%;
@@ -90,4 +98,53 @@ body { margin: 0; font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ari
   #app { grid-template-columns: 1fr; grid-template-rows: 280px 1fr; }
   .sidebar { border-right: 0; border-bottom: 1px solid #eee; }
   .stage { height: calc(100vh - 280px); }
+}
+
+#two-d-view {
+  position: absolute;
+  inset: 0;
+  background: #e0e0e0;
+  overflow: auto;
+  padding: 20px;
+  text-align: center;
+}
+
+#two-d-canvas {
+  background: #fff;
+  border: 1px solid #ccc;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+#back-to-3d-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  padding: 8px 16px;
+  background: #1f6feb;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#delete-decal-btn {
+  background-color: #d9534f;
+  margin-top: 16px;
+}
+#delete-decal-btn:hover {
+  background-color: #c9302c;
+}
+
+#show-2d-view-btn {
+  width: 100%;
+  padding: 10px;
+  margin-top: 16px;
+  background: #6c757d;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+#show-2d-view-btn:hover {
+  background: #5a6268;
 }
