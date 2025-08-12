@@ -1,87 +1,116 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="tr">
-<head>
-  <meta charset="utf-8" />
-  <title>Koli 2D → 3D Önizleme</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="stylesheet" href="style.css" />
-</head>
-<body>
-  <div id="app">
-    <aside class="sidebar">
-      <h1>Koli Seç</h1>
-      <div id="sku-list" class="sku-list"><!-- JS dolduracak --></div>
+  <head>
+    <meta charset="utf-8" />
+    <title>Koli 2D → 3D Önizleme</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside class="sidebar">
+        <h1>Koli Seç</h1>
+        <div id="sku-list" class="sku-list"><!-- JS dolduracak --></div>
 
-      <div id="dimension-panel" class="hidden">
-        <h3>Boyutları Düzenle</h3>
-        <div>
-          <label for="dim-w">Genişlik (mm):</label>
-          <input type="number" id="dim-w">
+        <div id="dimension-panel" class="hidden">
+          <div>
+            <label for="dim-w">Genişlik (mm):</label>
+            <input type="number" id="dim-w" />
+          </div>
+          <div>
+            <label for="dim-h">Yükseklik (mm):</label>
+            <input type="number" id="dim-h" />
+          </div>
+          <div>
+            <label for="dim-d">Derinlik (mm):</label>
+            <input type="number" id="dim-d" />
+          </div>
+          <button id="update-dims-btn">Boyutları Güncelle</button>
         </div>
-        <div>
-          <label for="dim-h">Yükseklik (mm):</label>
-          <input type="number" id="dim-h">
-        </div>
-        <div>
-          <label for="dim-d">Derinlik (mm):</label>
-          <input type="number" id="dim-d">
-        </div>
-        <button id="update-dims-btn">Boyutları Güncelle</button>
-      </div>
 
-      <button id="show-2d-view-btn">2D Görünüm</button>
-      <div id="edit-panel" class="hidden">
-        <h3>Yüzeyi Düzenle</h3>
-        <div>
-          <label for="text-input">Metin Ekle:</label>
-          <input type="text" id="text-input" placeholder="Metin girin...">
-          <button id="add-text-btn">Metin Ekle</button>
+        <button id="show-2d-view-btn">2D Görünüm</button>
+        <div id="edit-panel" class="hidden">
+          <h3>Yüzeyi Düzenle</h3>
+          <div>
+            <label for="text-input">Metin Ekle:</label>
+            <input type="text" id="text-input" placeholder="Metin girin..." />
+            <button id="add-text-btn">Metin Ekle</button>
+          </div>
+          <div>
+            <label for="image-input">Görsel Ekle:</label>
+            <input type="file" id="image-input" accept="image/*" />
+          </div>
+          <h4>Dönüşüm</h4>
+          <div>
+            <label for="pos-x">Pozisyon X:</label>
+            <input
+              type="range"
+              id="pos-x"
+              min="-0.5"
+              max="0.5"
+              step="0.01"
+              value="0"
+            />
+          </div>
+          <div>
+            <label for="pos-y">Pozisyon Y:</label>
+            <input
+              type="range"
+              id="pos-y"
+              min="-0.5"
+              max="0.5"
+              step="0.01"
+              value="0"
+            />
+          </div>
+          <div>
+            <label for="rotation">Rotasyon:</label>
+            <input
+              type="range"
+              id="rotation"
+              min="0"
+              max="360"
+              step="1"
+              value="0"
+            />
+          </div>
+          <div>
+            <label for="scale">Skala:</label>
+            <input
+              type="range"
+              id="scale"
+              min="0.1"
+              max="2"
+              step="0.01"
+              value="1"
+            />
+          </div>
+          <button id="delete-decal-btn">Seçili Öğeyi Sil</button>
         </div>
-        <div>
-          <label for="image-input">Görsel Ekle:</label>
-          <input type="file" id="image-input" accept="image/*">
-        </div>
-        <h4>Dönüşüm</h4>
-        <div>
-          <label for="pos-x">Pozisyon X:</label>
-          <input type="range" id="pos-x" min="-0.5" max="0.5" step="0.01" value="0">
-        </div>
-        <div>
-          <label for="pos-y">Pozisyon Y:</label>
-          <input type="range" id="pos-y" min="-0.5" max="0.5" step="0.01" value="0">
-        </div>
-        <div>
-          <label for="rotation">Rotasyon:</label>
-          <input type="range" id="rotation" min="0" max="360" step="1" value="0">
-        </div>
-        <div>
-          <label for="scale">Skala:</label>
-          <input type="range" id="scale" min="0.1" max="2" step="0.01" value="1">
-        </div>
-        <button id="delete-decal-btn">Seçili Öğeyi Sil</button>
-      </div>
-    </aside>
+      </aside>
 
-    <main class="stage">
-      <div id="canvas-wrap"></div>
-      <div id="two-d-view" class="hidden">
-        <canvas id="two-d-canvas"></canvas>
-        <button id="back-to-3d-btn">3D Görünüme Dön</button>
-      </div>
-      <div id="hud">
-        <div id="meta"></div>
-        <div id="loading" class="hidden">Yükleniyor…</div>
-      </div>
-    </main>
-  </div>
+      <main class="stage">
+        <div id="canvas-wrap"></div>
+        <div id="two-d-view" class="hidden">
+          <canvas id="two-d-canvas"></canvas>
+          <button id="back-to-3d-btn">3D Görünüme Dön</button>
+        </div>
+        <div id="hud">
+          <div id="meta"></div>
+          <div id="loading" class="hidden">Yükleniyor…</div>
+        </div>
+      </main>
+    </div>
 
-  <script type="importmap">{
-    "imports": {
-      "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
-      "three/examples/jsm/controls/OrbitControls.js": "https://unpkg.com/three@0.164.1/examples/jsm/controls/OrbitControls.js"
-    }
-  }</script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+          "three/examples/jsm/controls/OrbitControls.js": "https://unpkg.com/three@0.164.1/examples/jsm/controls/OrbitControls.js"
+        }
+      }
+    </script>
 
-  <script type="module" src="app.js"></script>
-</body>
+    <script type="module" src="app.js"></script>
+  </body>
 </html>

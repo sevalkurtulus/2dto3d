@@ -148,3 +148,13 @@ body { margin: 0; font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ari
 #show-2d-view-btn:hover {
   background: #5a6268;
 }
+#update-dims-btn {
+  width: 100%;
+  padding: 10px;
+  margin-top: 16px;
+  background: #6c757d;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
