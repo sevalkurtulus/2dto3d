@@ -781,7 +781,36 @@ function draw2DBox() {
   Promise.all(promises).then(() => {
     // All textures drawn, now draw decals
     draw2DDecals(ctx, scaleFactor, layout, boxParams);
+    // After decals, draw dimensions
+    draw2DDimensions(ctx, layout, w, h, d);
   });
+}
+
+function draw2DDimensions(ctx, layout, w, h, d) {
+  ctx.fillStyle = 'black';
+  ctx.font = 'bold 16px Arial';
+
+  // --- Width (w) ---
+  const topFace = layout[2];
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(`${w}mm`, topFace.x + topFace.w / 2, topFace.y - 5);
+
+  // --- Height (h) ---
+  const backFace = layout[5];
+  ctx.save();
+  ctx.translate(backFace.x - 5, backFace.y + backFace.h / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText(`${h}mm`, 0, 0);
+  ctx.restore();
+
+  // --- Depth (d) ---
+  const leftFace = layout[1];
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(`${d}mm`, leftFace.x + leftFace.w / 2, leftFace.y - 5);
 }
 
 function draw2DDecals(ctx, scaleFactor, layout, boxParams) {
