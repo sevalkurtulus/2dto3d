@@ -621,10 +621,73 @@ function addTextDecal(text) {
   context.fillStyle = "rgba(0,0,0,0)";
   context.fillRect(0, 0, canvasSize, canvasSize);
   context.fillStyle = "black";
-  context.font = "bold 160px Arial";
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillText(text, canvasSize / 2, canvasSize / 2);
+
+  const maxWidth = canvasSize * 0.9; // 90% of canvas width
+  let fontSize = 160; // Initial font size
+  let lines = [];
+
+  // Function to wrap text
+  const wrapText = (ctx, text, maxWidth) => {
+    const words = text.split(' ');
+    let lines = [];
+    let currentLine = '';
+
+    for (let i = 0; i < words.length; i++) {
+      let word = words[i];
+      let testLine = currentLine === '' ? word : currentLine + ' ' + word;
+      let testWidth = ctx.measureText(testLine).width;
+
+      if (testWidth > maxWidth && currentLine !== '') {
+        // If adding the word makes the line too long, and currentLine is not empty,
+        // push currentLine and start a new one with the current word.
+        lines.push(currentLine);
+        currentLine = word;
+        testWidth = ctx.measureText(word).width; // Check width of the new line (just the word)
+      } else if (testWidth > maxWidth && currentLine === '') {
+        // If even a single word is too long for a new line, break the word.
+        let tempWord = '';
+        for (let j = 0; j < word.length; j++) {
+          let char = word[j];
+          let testCharLine = tempWord + char;
+          if (ctx.measureText(testCharLine).width > maxWidth) {
+            lines.push(tempWord);
+            tempWord = char;
+          } else {
+            tempWord = testCharLine;
+          }
+        }
+        currentLine = tempWord; // The remainder of the broken word becomes the start of the next line
+        continue; // Move to the next word
+      } else {
+        currentLine = testLine;
+      }
+    }
+    lines.push(currentLine); // Add the last line
+    return lines;
+  };
+
+  // Try to fit text by reducing font size if necessary
+  do {
+    context.font = `bold ${fontSize}px Arial`;
+    lines = wrapText(context, text, maxWidth);
+    // Check if all lines fit within the canvas height
+    const totalTextHeight = lines.length * (fontSize * 1.2); // 1.2 is line height factor
+    if (totalTextHeight > canvasSize * 0.9 && fontSize > 20) { // 90% of canvas height
+      fontSize -= 5; // Reduce font size
+    } else {
+      break; // Text fits or font size is too small to reduce further
+    }
+  } while (fontSize > 10);
+
+  const lineHeight = fontSize * 1.2;
+  let y = canvasSize / 2 - (lines.length - 1) * lineHeight / 2;
+
+  lines.forEach((line) => {
+    context.fillText(line, canvasSize / 2, y);
+    y += lineHeight;
+  });
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
