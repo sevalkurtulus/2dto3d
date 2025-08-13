@@ -40,8 +40,8 @@ let selectedSKU = null;
 let selectedFace = null;
 let lastDecal = null;
 let hasUnsavedChanges = false;
-let decals = []; // Array to store all added decals
-let selectedDecal = null; // Currently selected decal
+let decals = []; // all decals
+let selectedDecal = null; // active selected decal
 let isAnimating = false;
 let animationStartTime = 0;
 const animationDuration = 500; // ms
@@ -80,23 +80,32 @@ const cfg = {
   ],
 };
 
+// ---------------- Helpers for active decal & face ----------------
+function getActiveDecal() {
+  return selectedDecal || lastDecal || null;
+}
+function getFaceParamsForDecal(decal) {
+  const boxParams = currentMesh.geometry.parameters;
+  const matIndex = decal.attachedFaceMaterialIndex;
+  const { faceW, faceH } = getFaceSizeForMatIndex(matIndex, boxParams);
+  return { faceW, faceH, matIndex, boxParams };
+}
+
+// ---------------- Delete Decal ----------------
 function onDeleteDecal() {
   if (selectedDecal) {
     scene.remove(selectedDecal);
     selectedDecal.geometry?.dispose();
     selectedDecal.material?.dispose();
 
-    // Remove from decals array
     const index = decals.indexOf(selectedDecal);
-    if (index > -1) {
-      decals.splice(index, 1);
-    }
+    if (index > -1) decals.splice(index, 1);
 
     selectedDecal = null;
-    selectedFace = null; // Clear selected face as well
+    lastDecal = null;
+    selectedFace = null;
     editPanel.classList.add("hidden");
 
-    // Update hasUnsavedChanges
     hasUnsavedChanges = decals.length > 0;
   }
 }
@@ -162,7 +171,7 @@ function init() {
   buildSidebar(items);
   if (items.length) selectSKU(items[0].sku);
 
-  hide2DView(); // Ensure 3D view is active initially
+  hide2DView();
   animate();
 }
 
@@ -215,15 +224,12 @@ async function selectSKU(sku) {
   setActive(sku);
   metaEl.textContent = `${item.name || item.sku} — ${fmtDims(item.dims)}`;
 
-  // Önce mevcut durumu temizle
   clearDecals();
 
-  // Yeni koli modelini yükle
   showLoading(true);
   await loadItem(item).catch(console.error);
   showLoading(false);
 
-  // Her şey yüklendikten sonra, boyutları ilgili alanlara doldur ve paneli göster
   dimWInput.value = item.dims.w;
   dimHInput.value = item.dims.h;
   dimDInput.value = item.dims.d;
@@ -243,23 +249,18 @@ function updateDimensions() {
   }
 
   const currentItem = items.find((i) => i.sku === selectedSKU);
-  const modifiedItem = {
-    ...currentItem,
-    dims: { w, h, d },
-  };
+  const modifiedItem = { ...currentItem, dims: { w, h, d } };
 
   metaEl.textContent = `${modifiedItem.name || modifiedItem.sku} — ${fmtDims(
     modifiedItem.dims
   )}`;
 
-  // Yeni boyutlarla modeli yeniden yükle
   clearDecals();
   showLoading(true);
   loadItem(modifiedItem)
     .catch(console.error)
     .finally(() => {
       showLoading(false);
-      // Güncellemeden sonra paneli tekrar göster
       dimensionPanel.classList.remove("hidden");
     });
 }
@@ -274,8 +275,8 @@ function clearDecals() {
     m.geometry?.dispose();
     m.material?.dispose();
   });
-  decals = []; // Clear the decals array
-  selectedDecal = null; // Reset selected decal
+  decals = [];
+  selectedDecal = null;
   lastDecal = null;
   hasUnsavedChanges = false;
   selectedFace = null;
@@ -417,45 +418,41 @@ function onCanvasClick(event) {
 
   raycaster.setFromCamera(mouse, camera);
 
-  // Check for decal intersection first
+  // 1) decals?
   const decalIntersects = raycaster.intersectObjects(decals);
-
   if (decalIntersects.length > 0) {
-    // Decal clicked
     const clickedDecal = decalIntersects[0].object;
-    if (selectedDecal !== clickedDecal) {
-      // Deselect previous decal if any
-      if (selectedDecal) {
-        selectedDecal.material.color.set(0xffffff); // Reset color
-      }
-      selectedDecal = clickedDecal;
-      selectedDecal.material.color.set(0x00ff00); // Highlight selected decal
-      selectedFace = null; // Clear selected face
-      // Update edit panel with decal's current transform values
-      posXInput.value = selectedDecal.position
-        .clone()
-        .sub(selectedDecal.initialPosition)
-        .dot(selectedDecal.tangent);
-      posYInput.value = selectedDecal.position
-        .clone()
-        .sub(selectedDecal.initialPosition)
-        .dot(selectedDecal.bitangent);
-      rotationInput.value = (
-        (selectedDecal.rotation.z * 180) /
-        Math.PI
-      ).toFixed(2);
-      scaleInput.value = selectedDecal.scale.x.toFixed(2);
-      editPanel.classList.remove("hidden");
+    if (selectedDecal && selectedDecal !== clickedDecal) {
+      selectedDecal.material.color.set(0xffffff);
     }
-  } else if (currentMesh) {
-    // Check for box face intersection
+    selectedDecal = clickedDecal;
+    lastDecal = clickedDecal;
+    selectedDecal.material.color.set(0x00ff00); // highlight
+    selectedFace = null; // yüzey seçimini temizle
+
+    // inputlara mevcut değerleri yaz
+    const rel = selectedDecal.position
+      .clone()
+      .sub(selectedDecal.initialPosition);
+    posXInput.value = rel.dot(selectedDecal.tangent).toFixed(4);
+    posYInput.value = rel.dot(selectedDecal.bitangent).toFixed(4);
+    rotationInput.value = ((selectedDecal.rotation.z * 180) / Math.PI).toFixed(
+      2
+    );
+    scaleInput.value = selectedDecal.scale.x.toFixed(2);
+
+    updateTransformLimits();
+    editPanel.classList.remove("hidden");
+    return;
+  }
+
+  // 2) box face?
+  if (currentMesh) {
     const boxIntersects = raycaster.intersectObject(currentMesh);
     if (boxIntersects.length > 0) {
-      // Box face clicked
-      if (selectedDecal) {
-        selectedDecal.material.color.set(0xffffff); // Reset color
-        selectedDecal = null; // Clear selected decal
-      }
+      if (selectedDecal) selectedDecal.material.color.set(0xffffff);
+      selectedDecal = null;
+
       const faceIndex = boxIntersects[0].faceIndex;
       const materialIndex = Math.floor(faceIndex / 2);
 
@@ -470,38 +467,36 @@ function onCanvasClick(event) {
         mesh: currentMesh,
         materialIndex,
         faceNormal: normal,
-        point: boxIntersects[0].point, // sadece bilgi
-        center: centerWorld, // anchor: yüzey merkezi
+        point: boxIntersects[0].point,
+        center: centerWorld,
         tangent,
         bitangent,
       };
 
+      // edit panel aç
       editPanel.classList.remove("hidden");
+      posXInput.value = "0";
+      posYInput.value = "0";
+      rotationInput.value = "0";
+      scaleInput.value = "1";
+      updateTransformLimits();
 
+      // yakından göster
       const distance = 0.8;
       const targetPosition = selectedFace.center
         .clone()
         .add(normal.clone().multiplyScalar(distance));
       const targetLookAt = selectedFace.center.clone();
       animateCameraTo(targetPosition, targetLookAt);
-    } else {
-      // Clicked nothing
-      if (selectedDecal) {
-        selectedDecal.material.color.set(0xffffff); // Reset color
-      }
-      selectedDecal = null;
-      selectedFace = null;
-      editPanel.classList.add("hidden");
+      return;
     }
-  } else {
-    // Clicked nothing and no current mesh
-    if (selectedDecal) {
-      selectedDecal.material.color.set(0xffffff); // Reset color
-    }
-    selectedDecal = null;
-    selectedFace = null;
-    editPanel.classList.add("hidden");
   }
+
+  // 3) boşluk
+  if (selectedDecal) selectedDecal.material.color.set(0xffffff);
+  selectedDecal = null;
+  selectedFace = null;
+  editPanel.classList.add("hidden");
 }
 
 function animateCameraTo(targetPosition, targetLookAt) {
@@ -538,14 +533,14 @@ function getFaceInfo(materialIndex, boxParams, mesh) {
 
   let centerLocal, tangentLocal, bitangentLocal;
 
-  // 0 right(+X),1 left(-X)   -> u: Z (depth), v: Y (height)
-  // 2 top(+Y), 3 bottom(-Y)  -> u: X (width), v: Z (depth)
-  // 4 front(+Z),5 back(-Z)   -> u: X (width), v: Y (height)
+  // 0 right(+X),1 left(-X)   -> u: Z, v: Y
+  // 2 top(+Y), 3 bottom(-Y)  -> u: X, v: Z
+  // 4 front(+Z),5 back(-Z)   -> u: X, v: Y
   switch (materialIndex) {
     case 0: // right
       centerLocal = new THREE.Vector3(+hw, 0, 0);
-      tangentLocal = new THREE.Vector3(0, 0, -1); // Corrected
-      bitangentLocal = new THREE.Vector3(0, 1, 0);   // Corrected
+      tangentLocal = new THREE.Vector3(0, 0, -1);
+      bitangentLocal = new THREE.Vector3(0, 1, 0);
       break;
     case 1: // left
       centerLocal = new THREE.Vector3(-hw, 0, 0);
@@ -555,7 +550,7 @@ function getFaceInfo(materialIndex, boxParams, mesh) {
     case 2: // top
       centerLocal = new THREE.Vector3(0, +hh, 0);
       tangentLocal = new THREE.Vector3(1, 0, 0);
-      bitangentLocal = new THREE.Vector3(0, 0, -1); // Corrected
+      bitangentLocal = new THREE.Vector3(0, 0, -1);
       break;
     case 3: // bottom
       centerLocal = new THREE.Vector3(0, -hh, 0);
@@ -569,8 +564,8 @@ function getFaceInfo(materialIndex, boxParams, mesh) {
       break;
     case 5: // back
       centerLocal = new THREE.Vector3(0, 0, -hd);
-      tangentLocal = new THREE.Vector3(-1, 0, 0); // Corrected
-      bitangentLocal = new THREE.Vector3(0, 1, 0);   // Corrected
+      tangentLocal = new THREE.Vector3(-1, 0, 0);
+      bitangentLocal = new THREE.Vector3(0, 1, 0);
       break;
     default:
       centerLocal = new THREE.Vector3(0, 0, 0);
@@ -594,13 +589,10 @@ function getFaceInfo(materialIndex, boxParams, mesh) {
 
 function getFaceSizeForMatIndex(matIndex, boxParams) {
   if (matIndex === 0 || matIndex === 1) {
-    // right/left
     return { faceW: boxParams.depth, faceH: boxParams.height };
   } else if (matIndex === 2 || matIndex === 3) {
-    // top/bottom
     return { faceW: boxParams.width, faceH: boxParams.depth };
   } else {
-    // front/back
     return { faceW: boxParams.width, faceH: boxParams.height };
   }
 }
@@ -622,15 +614,14 @@ function onAddText() {
 function addTextDecal(text) {
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
-  const canvasSize = 512; // daha keskin yazı
+  const canvasSize = 1024; // sharper text
   canvas.width = canvasSize;
   canvas.height = canvasSize;
 
   context.fillStyle = "rgba(0,0,0,0)";
   context.fillRect(0, 0, canvasSize, canvasSize);
-
   context.fillStyle = "black";
-  context.font = "bold 96px Arial";
+  context.font = "bold 160px Arial";
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.fillText(text, canvasSize / 2, canvasSize / 2);
@@ -640,32 +631,47 @@ function addTextDecal(text) {
   texture.needsUpdate = true;
 
   const mat = new THREE.MeshBasicMaterial({
-      map: texture,
-      transparent: true,
-      depthTest: false,
-      depthWrite: false,
-      polygonOffset: true,
-      polygonOffsetFactor: -4,
-    });
+    map: texture,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -4,
+  });
 
-  const decalSize = 0.2; // metre (kutunun metre cinsinden boyutlarına göre)
-  const geo = new THREE.PlaneGeometry(decalSize, decalSize);
+  // Fit to face with margin
+  const { faceW, faceH } = getFaceSizeForMatIndex(
+    selectedFace.materialIndex,
+    currentMesh.geometry.parameters
+  );
+  const margin = 0.04; // 40mm
+  const maxW = Math.max(0.01, faceW - margin * 2);
+  const maxH = Math.max(0.01, faceH - margin * 2);
+  const base = Math.min(maxW, maxH);
+
+  const geo = new THREE.PlaneGeometry(base, base);
   const decal = new THREE.Mesh(geo, mat);
 
-  // anchor ve yön
   decal.position.copy(selectedFace.center);
   decal.lookAt(selectedFace.center.clone().add(selectedFace.faceNormal));
   decal.initialPosition = selectedFace.center.clone();
   decal.tangent = selectedFace.tangent.clone();
   decal.bitangent = selectedFace.bitangent.clone();
-  decal.attachedFaceMaterialIndex = selectedFace.materialIndex; // Store face info
+  decal.attachedFaceMaterialIndex = selectedFace.materialIndex;
 
   scene.add(decal);
-  decals.push(decal); // Add decal to the array
+  decals.push(decal);
   lastDecal = decal;
+  selectedDecal = decal;
   hasUnsavedChanges = true;
 
+  // reset inputs
+  posXInput.value = "0";
+  posYInput.value = "0";
+  rotationInput.value = "0";
+  scaleInput.value = "1";
   updateTransformLimits();
+  editPanel.classList.remove("hidden");
 }
 
 function onAddImage(e) {
@@ -692,9 +698,37 @@ function addImageDecal(imageData) {
       polygonOffsetFactor: -4,
     });
 
-    const decalSize = 0.2;
-    const aspect = texture.image.width / texture.image.height || 1;
-    const geo = new THREE.PlaneGeometry(decalSize, decalSize / aspect);
+    // Fit to face with margin
+    const { faceW, faceH } = getFaceSizeForMatIndex(
+      selectedFace.materialIndex,
+      currentMesh.geometry.parameters
+    );
+    const margin = 0.04; // 40mm
+    const maxW = Math.max(0.01, faceW - margin * 2);
+    const maxH = Math.max(0.01, faceH - margin * 2);
+
+    const imgW = texture.image.width || 1;
+    const imgH = texture.image.height || 1;
+    const aspect = imgW / imgH;
+
+    let planeW, planeH;
+    if (aspect >= 1) {
+      planeW = maxW;
+      planeH = planeW / aspect;
+      if (planeH > maxH) {
+        planeH = maxH;
+        planeW = planeH * aspect;
+      }
+    } else {
+      planeH = maxH;
+      planeW = planeH * aspect;
+      if (planeW > maxW) {
+        planeW = maxW;
+        planeH = planeW / aspect;
+      }
+    }
+
+    const geo = new THREE.PlaneGeometry(planeW, planeH);
     const decal = new THREE.Mesh(geo, mat);
 
     decal.position.copy(selectedFace.center);
@@ -702,45 +736,48 @@ function addImageDecal(imageData) {
     decal.initialPosition = selectedFace.center.clone();
     decal.tangent = selectedFace.tangent.clone();
     decal.bitangent = selectedFace.bitangent.clone();
-    decal.attachedFaceMaterialIndex = selectedFace.materialIndex; // Store face info
+    decal.attachedFaceMaterialIndex = selectedFace.materialIndex;
 
     scene.add(decal);
-    decals.push(decal); // Add decal to the array
+    decals.push(decal);
     lastDecal = decal;
+    selectedDecal = decal;
     hasUnsavedChanges = true;
 
+    posXInput.value = "0";
+    posYInput.value = "0";
+    rotationInput.value = "0";
+    scaleInput.value = "1";
     updateTransformLimits();
+    editPanel.classList.remove("hidden");
   });
 }
 
+// ---------- 2D View ----------
 function show2DView() {
-  // Hide 3D canvas
   wrap.classList.add("hidden");
-  // Show 2D canvas
   twoDViewEl.classList.remove("hidden");
-  // TODO: Implement 2D rendering logic here
   draw2DBox();
 }
 
 function hide2DView() {
-  // Show 3D canvas
   wrap.classList.remove("hidden");
-  // Hide 2D canvas
   twoDViewEl.classList.add("hidden");
 }
 
 function draw2DBox() {
-  const ctx = twoDCanvas.getContext('2d');
+  if (!currentMesh) return;
+  const ctx = twoDCanvas.getContext("2d");
 
   const boxParams = currentMesh.geometry.parameters;
   const w = boxParams.width * 1000; // mm
   const h = boxParams.height * 1000;
   const d = boxParams.depth * 1000;
 
-  // --- Layout & Flap Definitions ---
+  // Layout & Flaps
   const flapHeight = d / 1.8;
   const taper = 20;
-  const scaleFactor = 1; // for decal compatibility
+  const scaleFactor = 1; // decal konumları mm -> canvas
 
   const layout = {
     5: { x: flapHeight + d, y: d, w: w, h: h }, // Back
@@ -756,31 +793,43 @@ function draw2DBox() {
 
   twoDCanvas.width = totalWidth + 40;
   twoDCanvas.height = totalHeight + 40;
-  
-  ctx.clearRect(0, 0, twoDCanvas.width, twoDCanvas.height);
-  ctx.translate(20, 20); // Apply padding
 
-  // --- 1. Draw Face Textures & Flap Backgrounds ---
+  ctx.setTransform(1, 0, 0, 1, 0, 0); // reset transform
+  ctx.clearRect(0, 0, twoDCanvas.width, twoDCanvas.height);
+  ctx.translate(20, 20); // padding
+
+  // 1) Face textures
   const promises = [];
   for (let i = 0; i < currentMats.length; i++) {
     const mat = currentMats[i];
     if (mat.map) {
       const img = new Image();
-      img.src = mat.map.image.src;
-      const { x, y, w, h } = layout[i];
-      promises.push(new Promise(resolve => {
-        img.onload = () => {
-          ctx.drawImage(img, x, y, w, h);
-          resolve();
-        };
-      }));
+      // Some Three.js images may already be Image/Canvas elements
+      if (mat.map.image instanceof HTMLImageElement) {
+        img.src = mat.map.image.src;
+      } else if (mat.map.image instanceof HTMLCanvasElement) {
+        img.src = mat.map.image.toDataURL();
+      } else {
+        img.src = mat.map.image?.src || "";
+      }
+      const { x, y, w, h } = layout[i] || {};
+      if (x === undefined) continue;
+      promises.push(
+        new Promise((resolve) => {
+          img.onload = () => {
+            ctx.drawImage(img, x, y, w, h);
+            resolve();
+          };
+          img.onerror = () => resolve();
+        })
+      );
     }
   }
 
-  // Draw Flap Background Color
-  ctx.fillStyle = '#E0C4A0'; // Kraft paper color
+  // 2) Flap background (kraft)
+  ctx.fillStyle = "#E0C4A0";
   const topFace = layout[2];
-  // Left Flap Shape
+  // Left flap
   ctx.beginPath();
   ctx.moveTo(topFace.x, topFace.y);
   ctx.lineTo(topFace.x - flapHeight + taper, topFace.y);
@@ -790,7 +839,7 @@ function draw2DBox() {
   ctx.lineTo(topFace.x, topFace.y + topFace.h);
   ctx.closePath();
   ctx.fill();
-  // Right Flap Shape
+  // Right flap
   ctx.beginPath();
   ctx.moveTo(topFace.x + topFace.w, topFace.y);
   ctx.lineTo(topFace.x + topFace.w + flapHeight - taper, topFace.y);
@@ -802,79 +851,118 @@ function draw2DBox() {
   ctx.fill();
 
   Promise.all(promises).then(() => {
-    // --- 2. Draw Decals ---
+    // 3) Decals (clipped per face)
     draw2DDecals(ctx, scaleFactor, layout, boxParams);
 
-    // --- 3. Draw Lines ---
+    // 4) Lines
     ctx.lineWidth = 2;
-    // Fold Lines
+
+    // Fold lines (dashed)
     ctx.beginPath();
     ctx.setLineDash([8, 8]);
-    ctx.strokeStyle = '#000000';
-    const top = layout[2], back = layout[5], bottom = layout[3], front = layout[4], left = layout[1], right = layout[0];
-    ctx.moveTo(top.x, top.y + top.h); ctx.lineTo(top.x + top.w, top.y + top.h);
-    ctx.moveTo(back.x, back.y + back.h); ctx.lineTo(back.x + back.w, back.y + back.h);
-    ctx.moveTo(bottom.x, bottom.y + bottom.h); ctx.lineTo(bottom.x + bottom.w, bottom.y + bottom.h);
-    ctx.moveTo(left.x + left.w, left.y); ctx.lineTo(left.x + left.w, left.y + left.h);
-    ctx.moveTo(right.x, right.y); ctx.lineTo(right.x, right.y + right.h);
-    ctx.moveTo(top.x, top.y); ctx.lineTo(top.x, top.y + top.h);
-    ctx.moveTo(top.x + top.w, top.y); ctx.lineTo(top.x + top.w, top.y + top.h);
+    ctx.strokeStyle = "#000000";
+    const top = layout[2],
+      back = layout[5],
+      bottom = layout[3],
+      front = layout[4],
+      left = layout[1],
+      right = layout[0];
+    ctx.moveTo(top.x, top.y + top.h);
+    ctx.lineTo(top.x + top.w, top.y + top.h);
+    ctx.moveTo(back.x, back.y + back.h);
+    ctx.lineTo(back.x + back.w, back.y + back.h);
+    ctx.moveTo(bottom.x, bottom.y + bottom.h);
+    ctx.lineTo(bottom.x + bottom.w, bottom.y + bottom.h);
+    ctx.moveTo(left.x + left.w, left.y);
+    ctx.lineTo(left.x + left.w, left.y + left.h);
+    ctx.moveTo(right.x, right.y);
+    ctx.lineTo(right.x, right.y + right.h);
+    ctx.moveTo(top.x, top.y);
+    ctx.lineTo(top.x, top.y + top.h);
+    ctx.moveTo(top.x + top.w, top.y);
+    ctx.lineTo(top.x + top.w, top.y + top.h);
     ctx.stroke();
 
-    // Cut Lines
+    // Cut lines (also dashed for consistency)
     ctx.beginPath();
-    ctx.setLineDash([8, 8]); // Changed from solid to dashed
-    ctx.strokeStyle = '#000000'; // Changed from red to black
+    ctx.setLineDash([8, 8]);
+    ctx.strokeStyle = "#000000";
     ctx.moveTo(left.x, left.y);
-    ctx.lineTo(left.x + left.w, left.y); ctx.lineTo(top.x, top.y);
-    ctx.lineTo(top.x + top.w, top.y); ctx.lineTo(right.x, right.y);
-    ctx.lineTo(right.x + right.w, right.y); ctx.lineTo(right.x + right.w, right.y + right.h);
-    ctx.lineTo(right.x, right.y + right.h); ctx.lineTo(bottom.x + bottom.w, bottom.y);
-    ctx.lineTo(front.x + front.w, front.y + front.h); ctx.lineTo(front.x, front.y + front.h);
-    ctx.lineTo(bottom.x, bottom.y + bottom.h); ctx.lineTo(left.x + left.w, left.y + left.h);
-    ctx.lineTo(left.x, left.y + left.h); ctx.closePath();
-    ctx.moveTo(top.x, top.y); ctx.lineTo(top.x - flapHeight + taper, top.y);
-    ctx.lineTo(top.x - flapHeight, top.y + taper); ctx.lineTo(top.x - flapHeight, top.y + top.h - taper);
-    ctx.lineTo(top.x - flapHeight + taper, top.y + top.h); ctx.lineTo(top.x, top.y + top.h);
-    ctx.moveTo(top.x + top.w, top.y); ctx.lineTo(top.x + top.w + flapHeight - taper, top.y);
-    ctx.lineTo(top.x + top.w + flapHeight, top.y + taper); ctx.lineTo(top.x + top.w + flapHeight, top.y + top.h - taper);
-    ctx.lineTo(top.x + top.w + flapHeight - taper, top.y + top.h); ctx.lineTo(top.x + top.w, top.y + top.h);
+    ctx.lineTo(left.x + left.w, left.y);
+    ctx.lineTo(top.x, top.y);
+    ctx.lineTo(top.x + top.w, top.y);
+    ctx.lineTo(right.x, right.y);
+    ctx.lineTo(right.x + right.w, right.y);
+    ctx.lineTo(right.x + right.w, right.y + right.h);
+    ctx.lineTo(right.x, right.y + right.h);
+    ctx.lineTo(bottom.x + bottom.w, bottom.y);
+    ctx.lineTo(front.x + front.w, front.y + front.h);
+    ctx.lineTo(front.x, front.y + front.h);
+    ctx.lineTo(bottom.x, bottom.y + bottom.h);
+    ctx.lineTo(left.x + left.w, left.y + left.h);
+    ctx.lineTo(left.x, left.y + left.h);
+    ctx.closePath();
+    ctx.moveTo(top.x, top.y);
+    ctx.lineTo(top.x - flapHeight + taper, top.y);
+    ctx.lineTo(top.x - flapHeight, top.y + taper);
+    ctx.lineTo(top.x - flapHeight, top.y + top.h - taper);
+    ctx.lineTo(top.x - flapHeight + taper, top.y + top.h);
+    ctx.lineTo(top.x, top.y + top.h);
+    ctx.moveTo(top.x + top.w, top.y);
+    ctx.lineTo(top.x + top.w + flapHeight - taper, top.y);
+    ctx.lineTo(top.x + top.w + flapHeight, top.y + taper);
+    ctx.lineTo(top.x + top.w + flapHeight, top.y + top.h - taper);
+    ctx.lineTo(top.x + top.w + flapHeight - taper, top.y + top.h);
+    ctx.lineTo(top.x + top.w, top.y + top.h);
     ctx.stroke();
 
-    // --- 4. Draw Dimensions ---
+    // 5) Dimensions text
     draw2DDimensions(ctx, layout, w, h, d, flapHeight);
   });
 }
 
 function draw2DDecals(ctx, scaleFactor, layout, boxParams) {
-  decals.forEach(decal => {
+  decals.forEach((decal) => {
     const faceLayout = layout[decal.attachedFaceMaterialIndex];
     if (!faceLayout) return;
 
-    // Decal's position relative to its face center (in meters)
-    const decalRelativePos = decal.position.clone().sub(decal.initialPosition);
-    const offsetX = decalRelativePos.dot(decal.tangent) * 1000; // to mm
-    const offsetY = decalRelativePos.dot(decal.bitangent) * 1000; // to mm
-
-    const decal2DX = faceLayout.x + (faceLayout.w / 2) + offsetX * scaleFactor;
-    const decal2DY = faceLayout.y + (faceLayout.h / 2) - offsetY * scaleFactor; // Canvas Y is inverted vs Three.js
-
-    const decalBaseWidth = decal.geometry.parameters.width * 1000;
-    const decalBaseHeight = decal.geometry.parameters.height * 1000;
-    const decalScale = decal.scale.x;
-    const decalRotation = decal.rotation.z;
-
-    const drawWidth = decalBaseWidth * decalScale * scaleFactor;
-    const drawHeight = decalBaseHeight * decalScale * scaleFactor;
-
+    // Clip to face rect to prevent overflow
     ctx.save();
-    ctx.translate(decal2DX, decal2DY);
-    ctx.rotate(decalRotation);
+    ctx.beginPath();
+    ctx.rect(faceLayout.x, faceLayout.y, faceLayout.w, faceLayout.h);
+    ctx.clip();
 
-    if (decal.material.map.image instanceof HTMLCanvasElement) {
-      ctx.drawImage(decal.material.map.image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
-    } else {
-      ctx.drawImage(decal.material.map.image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+    // Position relative to face center (Three.js meters -> mm)
+    const decalRelativePos = decal.position.clone().sub(decal.initialPosition);
+    const offsetX = decalRelativePos.dot(decal.tangent) * 1000; // mm
+    const offsetY = decalRelativePos.dot(decal.bitangent) * 1000; // mm
+
+    const cx = faceLayout.x + faceLayout.w / 2 + offsetX * scaleFactor;
+    const cy = faceLayout.y + faceLayout.h / 2 - offsetY * scaleFactor; // canvas Y inverted
+
+    const baseWmm = decal.geometry.parameters.width * 1000;
+    const baseHmm = decal.geometry.parameters.height * 1000;
+    const s = decal.scale.x; // uniform
+    const drawW = baseWmm * s * scaleFactor;
+    const drawH = baseHmm * s * scaleFactor;
+    const rot = decal.rotation.z; // radians
+
+    // Draw
+    ctx.translate(cx, cy);
+    ctx.rotate(rot);
+
+    const img = decal.material.map.image;
+    if (img instanceof HTMLCanvasElement) {
+      ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+    } else if (img instanceof HTMLImageElement) {
+      ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+    } else if (img) {
+      // fallback if texture image is something else
+      try {
+        const tmp = new Image();
+        tmp.src = img.src || "";
+        ctx.drawImage(tmp, -drawW / 2, -drawH / 2, drawW, drawH);
+      } catch (_) {}
     }
 
     ctx.restore();
@@ -882,48 +970,64 @@ function draw2DDecals(ctx, scaleFactor, layout, boxParams) {
 }
 
 function draw2DDimensions(ctx, layout, w, h, d, flapHeight) {
-  ctx.fillStyle = 'black';
-  ctx.font = 'bold 14px Arial';
+  ctx.fillStyle = "black";
+  ctx.font = "bold 14px Arial";
 
   const topFace = layout[2];
   const backFace = layout[5];
   const leftFace = layout[1];
 
-  // Genişlik (w)
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
+  // Width (w)
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
   ctx.fillText(`${w}mm`, topFace.x + topFace.w / 2, topFace.y - 5);
 
-  // Yükseklik (h)
+  // Height (h)
   ctx.save();
   ctx.translate(leftFace.x - flapHeight - 5, backFace.y + backFace.h / 2);
   ctx.rotate(-Math.PI / 2);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
   ctx.fillText(`${h}mm`, 0, 0);
   ctx.restore();
 
-  // Derinlik (d)
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
+  // Depth (d)
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
   ctx.fillText(`${d}mm`, leftFace.x + leftFace.w / 2, leftFace.y - 5);
 }
 
 // ---------- Movement Limits (with rotation) ----------
 function updateTransformLimits() {
-  if (!lastDecal || !selectedFace) return;
+  const decal = getActiveDecal();
+  const face = selectedFace;
+  if (!decal && !face) return;
 
-  const boxParams = currentMesh.geometry.parameters;
-  const { faceW, faceH } = getFaceSizeForMatIndex(
-    selectedFace.materialIndex,
-    boxParams
-  );
+  // Eğer yüzey seçiliyse ama decal yoksa, konum alanlarını yüzey sınırlarına göre ayarla
+  if (!decal && face) {
+    const { faceW, faceH } = getFaceSizeForMatIndex(
+      face.materialIndex,
+      currentMesh.geometry.parameters
+    );
+    const maxX = Math.max(0, faceW / 2 - 0.001);
+    const maxY = Math.max(0, faceH / 2 - 0.001);
+    posXInput.min = -maxX;
+    posXInput.max = maxX;
+    posYInput.min = -maxY;
+    posYInput.max = maxY;
+    const step = Math.max(0.0005, Math.min(maxX, maxY) / 100 || 0.001);
+    posXInput.step = step;
+    posYInput.step = step;
+    return;
+  }
 
-  const base = lastDecal.geometry.parameters; // width/height of plane (meters)
-  const scaledW = base.width * lastDecal.scale.x;
-  const scaledH = base.height * lastDecal.scale.y;
+  // Aktif decal varsa
+  const { faceW, faceH } = getFaceParamsForDecal(decal);
+  const base = decal.geometry.parameters; // m
+  const scaledW = base.width * decal.scale.x;
+  const scaledH = base.height * decal.scale.y;
 
-  const theta = lastDecal.rotation.z || 0;
+  const theta = decal.rotation.z || 0;
   const { halfX, halfY } = rotatedHalfExtents(scaledW, scaledH, theta);
 
   const maxX = Math.max(0, faceW / 2 - halfX);
@@ -940,33 +1044,29 @@ function updateTransformLimits() {
 }
 
 function onTransformChange() {
-  if (!lastDecal || !selectedFace) return;
+  const decal = getActiveDecal();
+  if (!decal) return;
 
-  // Ölçek
-  const scale = parseFloat(scaleInput.value) || 1;
-  lastDecal.scale.set(scale, scale, scale);
+  // Scale
+  const newScale = Math.max(0.01, parseFloat(scaleInput.value) || 1);
+  decal.scale.set(newScale, newScale, newScale);
 
-  // Rotasyon (deg -> rad)
+  // Rotation
   const rotRad = ((parseFloat(rotationInput.value) || 0) * Math.PI) / 180;
-  lastDecal.rotation.z = rotRad;
+  decal.rotation.z = rotRad;
 
-  // limitler scale/rotation’a bağlı — yeniden hesapla
+  // Limits depend on rotation/scale
   updateTransformLimits();
 
-  // Pozisyon (clamp)
-  const boxParams = currentMesh.geometry.parameters;
-  const { faceW, faceH } = getFaceSizeForMatIndex(
-    selectedFace.materialIndex,
-    boxParams
-  );
-
-  const base = lastDecal.geometry.parameters;
-  const scaledW = base.width * lastDecal.scale.x;
-  const scaledH = base.height * lastDecal.scale.y;
+  // Position (clamp)
+  const { faceW, faceH } = getFaceParamsForDecal(decal);
+  const base = decal.geometry.parameters;
+  const scaledW = base.width * decal.scale.x;
+  const scaledH = base.height * decal.scale.y;
   const { halfX, halfY } = rotatedHalfExtents(
     scaledW,
     scaledH,
-    lastDecal.rotation.z
+    decal.rotation.z
   );
 
   const maxX = Math.max(0, faceW / 2 - halfX);
@@ -974,19 +1074,16 @@ function onTransformChange() {
 
   let posX = parseFloat(posXInput.value) || 0;
   let posY = parseFloat(posYInput.value) || 0;
-
   posX = Math.max(-maxX, Math.min(maxX, posX));
   posY = Math.max(-maxY, Math.min(maxY, posY));
-
   posXInput.value = posX;
   posYInput.value = posY;
 
-  const newPos = selectedFace.center
+  const newPos = decal.initialPosition
     .clone()
-    .add(selectedFace.tangent.clone().multiplyScalar(posX))
-    .add(selectedFace.bitangent.clone().multiplyScalar(posY));
-
-  lastDecal.position.copy(newPos);
+    .add(decal.tangent.clone().multiplyScalar(posX))
+    .add(decal.bitangent.clone().multiplyScalar(posY));
+  decal.position.copy(newPos);
 }
 
 // ---------- Loop ----------
