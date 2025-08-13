@@ -542,35 +542,35 @@ function getFaceInfo(materialIndex, boxParams, mesh) {
   // 2 top(+Y), 3 bottom(-Y)  -> u: X (width), v: Z (depth)
   // 4 front(+Z),5 back(-Z)   -> u: X (width), v: Y (height)
   switch (materialIndex) {
-    case 0:
+    case 0: // right
       centerLocal = new THREE.Vector3(+hw, 0, 0);
-      tangentLocal = new THREE.Vector3(0, 0, 1);
-      bitangentLocal = new THREE.Vector3(0, 1, 0);
+      tangentLocal = new THREE.Vector3(0, 0, -1); // Corrected
+      bitangentLocal = new THREE.Vector3(0, 1, 0);   // Corrected
       break;
-    case 1:
+    case 1: // left
       centerLocal = new THREE.Vector3(-hw, 0, 0);
       tangentLocal = new THREE.Vector3(0, 0, 1);
       bitangentLocal = new THREE.Vector3(0, 1, 0);
       break;
-    case 2:
+    case 2: // top
       centerLocal = new THREE.Vector3(0, +hh, 0);
       tangentLocal = new THREE.Vector3(1, 0, 0);
-      bitangentLocal = new THREE.Vector3(0, 0, 1);
+      bitangentLocal = new THREE.Vector3(0, 0, -1); // Corrected
       break;
-    case 3:
+    case 3: // bottom
       centerLocal = new THREE.Vector3(0, -hh, 0);
       tangentLocal = new THREE.Vector3(1, 0, 0);
       bitangentLocal = new THREE.Vector3(0, 0, 1);
       break;
-    case 4:
+    case 4: // front
       centerLocal = new THREE.Vector3(0, 0, +hd);
       tangentLocal = new THREE.Vector3(1, 0, 0);
       bitangentLocal = new THREE.Vector3(0, 1, 0);
       break;
-    case 5:
+    case 5: // back
       centerLocal = new THREE.Vector3(0, 0, -hd);
-      tangentLocal = new THREE.Vector3(1, 0, 0);
-      bitangentLocal = new THREE.Vector3(0, 1, 0);
+      tangentLocal = new THREE.Vector3(-1, 0, 0); // Corrected
+      bitangentLocal = new THREE.Vector3(0, 1, 0);   // Corrected
       break;
     default:
       centerLocal = new THREE.Vector3(0, 0, 0);
@@ -640,13 +640,13 @@ function addTextDecal(text) {
   texture.needsUpdate = true;
 
   const mat = new THREE.MeshBasicMaterial({
-    map: texture,
-    transparent: true,
-    depthTest: false,
-    depthWrite: false,
-    polygonOffset: true,
-    polygonOffsetFactor: -4,
-  });
+      map: texture,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+    });
 
   const decalSize = 0.2; // metre (kutunun metre cinsinden boyutlarına göre)
   const geo = new THREE.PlaneGeometry(decalSize, decalSize);
